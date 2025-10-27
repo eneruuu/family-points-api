@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import json
 
 app = Flask(__name__)
 
@@ -10,14 +11,29 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-
 # Database model for family members
 class FamilyMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     points = db.Column(db.Integer, default=0)
-    completed_tasks = db.Column(db.ARRAY(String))
+    completed_tasks = db.Column(db.Text, default='[]')
     last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def get_completed_tasks(self):
+        """Convert JSON string back to Python list"""
+        return json.loads(self.completed_tasks)
+
+    def set_completed_tasks(self, tasks_list):
+        """Convert Python list to JSON string for storage"""
+        self.completed_tasks = json.dumps(tasks_list)
+
+    def add_task(self, task_name):
+        """Add a task to the completed tasks list"""
+        tasks = self.get_completed_tasks()
+        if task_name not in tasks: # Avoids duplicates
+            tasks = list(tasks)
+            tasks.append(task_name)
+            self.set_completed_tasks(tasks)
 
     def to_dict(self):
         return {
@@ -31,83 +47,65 @@ class FamilyMember(db.Model):
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
-    quantity = db.Column(db.ARRAY(Integer), default=[1,1,1])
-    subtasks = db.Column(db.ARRAY(String), default=[])
+    # quantity = db.Column(db.ARRAY(Integer), default=[1,1,1])
+    # subtasks = db.Column(db.ARRAY(String), default=[])
 
 # Create tables before first request
 with app.app_context():
     db.create_all()
 
+def member_to_json(member):
+    """Helper to convert member to JSON"""
+    return {
+        'name': member.name,
+        'points': member.points,
+        'completed_tasks': member.get_completed_tasks(),
+        'last_updated': member.last_updated.isoformat()
+    }
 
 @app.route('/')
 def home():
     return "Family Points API is running! 🎉"
 
-# Getting family member information
-@app.route('/points/<name>', methods=['GET'])
-def get_points(name):
-    member = FamilyMember.query.filter_by(name=name).first()
 
-    if not member:
-        return jsonify({
-            'name': name,
-            'points': 0,
-            'message': 'Member not found, starting with 0 points'
-        })
-
-    return jsonify(member.to_dict())
-
-# Adding points to a family member
-@app.route('/points/<name>', methods=['POST'])
-def add_points(name):
-    data = request.get_json()
-    points_to_add = data.get('points', 0)
-    task_to_add = data.get('task')
-
+# Accessing family member information
+@app.route('/<name>', methods=['GET', 'POST', 'PUT'])
+def access_member_data(name):
     member = FamilyMember.query.filter_by(name=name).first()
 
     if not member:
         # Create new member
-        member = FamilyMember(name=name, points=points_to_add, completed_tasks=completed_tasks.append(task_to_add))
+        member = FamilyMember(name=name, points=0)
         db.session.add(member)
-    else:
-        # Update existing member
-        member.points += points_to_add
-        member.completed_tasks.append(task_to_add)
-        member.last_updated = datetime.utcnow()
+        db.session.commit()
+        return jsonify(member_to_json(member))
 
-    db.session.commit()
+    if request.method == 'GET':
+        return jsonify({
+            'name': member.name,
+            'points': member.points,
+            'completed_tasks': member.get_completed_tasks(),
+            'last_updated': member.last_updated.isoformat()
+        })
 
-    return jsonify({
-        'name': member.name,
-        'points': member.points,
-        'completed_tasks': member.completed_tasks,
-        'message': 'Points updated!'
-    })
-
-# Setting points of a family member
-@app.route('/points/<name>', methods=['PUT'])
-def set_points(name):
-    """Set points to an exact value (useful for resetting)"""
     data = request.get_json()
-    new_points = data.get('points', 0)
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
 
-    member = FamilyMember.query.filter_by(name=name).first()
+    points_to_update = data.get('points')
+    task_to_update = data.get('task')
 
-    if not member:
-        member = FamilyMember(name=name, points=new_points)
-        db.session.add(member)
-    else:
-        member.points = new_points
-        member.last_updated = datetime.utcnow()
+    if request.method == 'POST':
+        member.points += points_to_update
+        member.add_task(task_to_update)
+    elif request.method == 'PUT':
+        member.points = points_to_update
+        member.set_completed_tasks(task_to_update)
 
+    member.last_updated = datetime.utcnow()
     db.session.commit()
+    return jsonify(member_to_json(member))
 
-    return jsonify({
-        'name': member.name,
-        'points': member.points,
-        'message': 'Points set!'
-    })
 
 # Getting the leaderboard
 @app.route('/leaderboard', methods=['GET'])
@@ -118,7 +116,7 @@ def leaderboard():
     })
 
 # Removing a family member
-@app.route('/reset/<name>', methods=['DELETE'])
+@app.route('/<name>/delete', methods=['DELETE'])
 def reset_member(name):
     """Delete a family member (for testing)"""
     member = FamilyMember.query.filter_by(name=name).first()
@@ -126,7 +124,7 @@ def reset_member(name):
     if member:
         db.session.delete(member)
         db.session.commit()
-        return jsonify({'message': f'{name} has been reset'})
+        return jsonify({'message': f'{name} has been deleted'})
 
     return jsonify({'message': f'{name} not found'}), 404
 
