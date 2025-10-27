@@ -68,7 +68,7 @@ def add_points(name):
 
     if not member:
         # Create new member
-        member = FamilyMember(name=name, points=points_to_add, completed_tasks.append(task_to_add))
+        member = FamilyMember(name=name, points=points_to_add, completed_tasks=completed_tasks.append(task_to_add))
         db.session.add(member)
     else:
         # Update existing member
@@ -81,7 +81,7 @@ def add_points(name):
     return jsonify({
         'name': member.name,
         'points': member.points,
-        'completed_tasks': member.completed_tasks
+        'completed_tasks': member.completed_tasks,
         'message': 'Points updated!'
     })
 
@@ -133,6 +133,4 @@ def reset_member(name):
 
 if __name__ == '__main__':
     # For local development
-
     app.run(debug=True, host='0.0.0.0', port=5000)
-
