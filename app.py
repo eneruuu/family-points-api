@@ -23,7 +23,7 @@ class FamilyMember(db.Model):
         return {
             'name': self.name,
             'points': self.points,
-            'completed_tasks': self.completed_tasks
+            'completed_tasks': self.completed_tasks,
             'last_updated': self.last_updated.isoformat()
         }
 
@@ -135,3 +135,4 @@ if __name__ == '__main__':
     # For local development
 
     app.run(debug=True, host='0.0.0.0', port=5000)
+
