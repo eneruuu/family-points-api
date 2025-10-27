@@ -16,7 +16,7 @@ class FamilyMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     points = db.Column(db.Integer, default=0)
-    completed_tasks = db.Column(db.ARRAY(String)))
+    completed_tasks = db.Column(db.ARRAY(String))
     last_updated = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -133,4 +133,5 @@ def reset_member(name):
 
 if __name__ == '__main__':
     # For local development
+
     app.run(debug=True, host='0.0.0.0', port=5000)
